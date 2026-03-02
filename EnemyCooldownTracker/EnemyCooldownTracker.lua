@@ -1,4 +1,4 @@
--- Enemy Cooldown Tracker for WoW 3.3.5
+-- Enemy Cooldown Tracker for WoW 3.3.5 (WotLK)
 -- Tracks important enemy cooldowns in PvP
 
 local addonName = "EnemyCooldownTracker"
@@ -128,7 +128,6 @@ local TrackedSpells = {
     [32182] = { duration = 40, cooldown = 600, name = "Heroism", priority = 9, class = "SHAMAN" },
     [57994] = { duration = 2, cooldown = 6, name = "Wind Shear", priority = 4, class = "SHAMAN" },
     [16190] = { duration = 12, cooldown = 300, name = "Mana Tide Totem", priority = 6, class = "SHAMAN" },
-    [79206] = { duration = 6, cooldown = 120, name = "Spiritwalker's Grace", priority = 5, class = "SHAMAN" },
     [8177]  = { duration = 45, cooldown = 15, name = "Grounding Totem", priority = 6, class = "SHAMAN" },
     
     -- DEATH KNIGHT
@@ -166,25 +165,41 @@ local ClassColors = {
     ALL = { 1, 1, 1 },
 }
 
--- Active cooldowns being tracked
-local ActiveCooldowns = {}
+-- Fallback spell icons for test mode (in case GetSpellInfo fails)
+local FallbackIcons = {
+    [51713] = "Interface\\Icons\\Ability_Rogue_ShadowDance",
+    [46924] = "Interface\\Icons\\Ability_Warrior_Bladestorm",
+    [45438] = "Interface\\Icons\\Spell_Frost_Frost",
+    [31224] = "Interface\\Icons\\Spell_Shadow_NetherCloak",
+    [642]   = "Interface\\Icons\\Spell_Holy_DivineShield",
+    [31884] = "Interface\\Icons\\Spell_Holy_AvengeWrath",
+    [47241] = "Interface\\Icons\\Spell_Shadow_DemonForm",
+    [48792] = "Interface\\Icons\\Spell_Deathknight_IceboundFortitude",
+    [48707] = "Interface\\Icons\\Spell_Shadow_AntiMagicShell",
+    [50334] = "Interface\\Icons\\Ability_Druid_Berserk",
+    [19263] = "Interface\\Icons\\Ability_Hunter_Readiness",
+    [33206] = "Interface\\Icons\\Spell_Holy_PainSuppression",
+    [2825]  = "Interface\\Icons\\Spell_Nature_Bloodlust",
+    [42292] = "Interface\\Icons\\INV_Jewelry_TrinketPVP_02",
+}
 
 -- Icon pool
 local IconPool = {}
 local ActiveIcons = {}
 
--- Create main anchor frame
+-- Create main anchor frame (3.3.5 compatible)
 local AnchorFrame = CreateFrame("Frame", "ECT_Anchor", UIParent)
-AnchorFrame:SetSize(300, 80)
+AnchorFrame:SetWidth(300)
+AnchorFrame:SetHeight(80)
 AnchorFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 150)
 AnchorFrame:SetMovable(true)
 AnchorFrame:EnableMouse(false)
 AnchorFrame:SetClampedToScreen(true)
 
--- Create background for drag mode
+-- Create background for drag mode (3.3.5 compatible - use solid texture)
 AnchorFrame.bg = AnchorFrame:CreateTexture(nil, "BACKGROUND")
 AnchorFrame.bg:SetAllPoints()
-AnchorFrame.bg:SetColorTexture(0, 0, 0, 0.5)
+AnchorFrame.bg:SetTexture(0, 0, 0, 0.5)
 AnchorFrame.bg:Hide()
 
 AnchorFrame.text = AnchorFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -192,10 +207,11 @@ AnchorFrame.text:SetPoint("CENTER")
 AnchorFrame.text:SetText("Enemy Cooldown Tracker\nDrag to move")
 AnchorFrame.text:Hide()
 
--- Create an icon frame
+-- Create an icon frame (3.3.5 compatible)
 local function CreateIcon()
     local frame = CreateFrame("Frame", nil, UIParent)
-    frame:SetSize(defaults.iconSize, defaults.iconSize)
+    frame:SetWidth(defaults.iconSize)
+    frame:SetHeight(defaults.iconSize)
     frame:SetFrameStrata("HIGH")
     
     -- Icon texture
@@ -203,53 +219,35 @@ local function CreateIcon()
     frame.icon:SetAllPoints()
     frame.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     
-    -- Cooldown spiral (for duration)
+    -- Cooldown frame (3.3.5 compatible)
     frame.cooldown = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
     frame.cooldown:SetAllPoints()
     frame.cooldown:SetReverse(true)
     
-    -- Border
+    -- Border glow
     frame.border = frame:CreateTexture(nil, "OVERLAY")
-    frame.border:SetPoint("TOPLEFT", -2, 2)
-    frame.border:SetPoint("BOTTOMRIGHT", 2, -2)
+    frame.border:SetPoint("TOPLEFT", -4, 4)
+    frame.border:SetPoint("BOTTOMRIGHT", 4, -4)
     frame.border:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
     frame.border:SetBlendMode("ADD")
     
-    -- Duration text
+    -- Duration text (big number in center)
     frame.duration = frame:CreateFontString(nil, "OVERLAY")
-    frame.duration:SetFont("Fonts\\FRIZQT__.TTF", 18, "OUTLINE")
+    frame.duration:SetFont("Fonts\\FRIZQT__.TTF", 20, "OUTLINE")
     frame.duration:SetPoint("CENTER", frame, "CENTER", 0, 0)
     frame.duration:SetTextColor(1, 1, 1)
     
-    -- Spell name
+    -- Spell name (below icon)
     frame.name = frame:CreateFontString(nil, "OVERLAY")
     frame.name:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
     frame.name:SetPoint("TOP", frame, "BOTTOM", 0, -2)
     frame.name:SetTextColor(1, 1, 1)
     
-    -- Source name
+    -- Source name (above icon)
     frame.source = frame:CreateFontString(nil, "OVERLAY")
     frame.source:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
     frame.source:SetPoint("BOTTOM", frame, "TOP", 0, 2)
     frame.source:SetTextColor(0.8, 0.8, 0.8)
-    
-    -- Animation group for fade in
-    frame.fadeIn = frame:CreateAnimationGroup()
-    local alpha = frame.fadeIn:CreateAnimation("Alpha")
-    alpha:SetFromAlpha(0)
-    alpha:SetToAlpha(1)
-    alpha:SetDuration(0.2)
-    
-    -- Animation group for pulse
-    frame.pulse = frame:CreateAnimationGroup()
-    local scale1 = frame.pulse:CreateAnimation("Scale")
-    scale1:SetScale(1.2, 1.2)
-    scale1:SetDuration(0.15)
-    scale1:SetOrder(1)
-    local scale2 = frame.pulse:CreateAnimation("Scale")
-    scale2:SetScale(0.833, 0.833)
-    scale2:SetDuration(0.15)
-    scale2:SetOrder(2)
     
     frame:Hide()
     return frame
@@ -291,19 +289,26 @@ local function RepositionIcons()
     for i, icon in ipairs(ActiveIcons) do
         icon:ClearAllPoints()
         icon:SetPoint("CENTER", AnchorFrame, "CENTER", startX + (i - 1) * (iconSize + spacing), 0)
-        icon:SetSize(iconSize, iconSize)
+        icon:SetWidth(iconSize)
+        icon:SetHeight(iconSize)
     end
 end
 
 -- Add a new cooldown to track
 local function AddCooldown(spellID, sourceGUID, sourceName)
     local spellData = TrackedSpells[spellID]
-    if not spellData then return end
+    if not spellData then 
+        print("|cffff0000[ECT Debug]|r Spell not found in TrackedSpells: " .. tostring(spellID))
+        return 
+    end
     
     local db = EnemyCooldownTrackerDB or defaults
     
     -- Check max icons
-    if #ActiveIcons >= (db.maxIcons or defaults.maxIcons) then return end
+    if #ActiveIcons >= (db.maxIcons or defaults.maxIcons) then 
+        print("|cffff0000[ECT Debug]|r Max icons reached")
+        return 
+    end
     
     -- Check if already tracking this spell from this source
     for _, icon in ipairs(ActiveIcons) do
@@ -312,16 +317,30 @@ local function AddCooldown(spellID, sourceGUID, sourceName)
         end
     end
     
-    local name, _, icon = GetSpellInfo(spellID)
-    if not name then return end
+    -- Get spell info
+    local name, rank, iconTexture = GetSpellInfo(spellID)
+    
+    -- Use fallback icon if GetSpellInfo failed
+    if not iconTexture then
+        iconTexture = FallbackIcons[spellID] or "Interface\\Icons\\INV_Misc_QuestionMark"
+    end
+    if not name then
+        name = spellData.name
+    end
     
     local iconFrame = GetIcon()
-    iconFrame.icon:SetTexture(icon)
-    iconFrame.name:SetText(spellData.name or name)
+    iconFrame.icon:SetTexture(iconTexture)
+    iconFrame.name:SetText(spellData.name or name or "Unknown")
     iconFrame.source:SetText(sourceName or "Unknown")
     iconFrame.spellID = spellID
     iconFrame.sourceGUID = sourceGUID
-    iconFrame.endTime = GetTime() + spellData.duration
+    
+    -- For instant spells (duration = 0), show for 3 seconds
+    local duration = spellData.duration
+    if duration == 0 then
+        duration = 3
+    end
+    iconFrame.endTime = GetTime() + duration
     iconFrame.duration:SetText("")
     
     -- Set border color based on class
@@ -331,21 +350,22 @@ local function AddCooldown(spellID, sourceGUID, sourceName)
     -- Start cooldown spiral
     if spellData.duration > 0 then
         iconFrame.cooldown:SetCooldown(GetTime(), spellData.duration)
+        iconFrame.cooldown:Show()
     else
         iconFrame.cooldown:Hide()
     end
     
     tinsert(ActiveIcons, iconFrame)
     iconFrame:Show()
-    iconFrame.fadeIn:Play()
-    iconFrame.pulse:Play()
     
     -- Play sound
-    if db.playSound then
-        PlaySound(8959)
+    if db.playSound ~= false then
+        PlaySound("RaidWarning")
     end
     
     RepositionIcons()
+    
+    print("|cff00ff00[ECT]|r Tracking: " .. (spellData.name or name) .. " from " .. (sourceName or "Unknown"))
 end
 
 -- Update function
@@ -365,7 +385,7 @@ local function OnUpdate(self, elapsed)
         if remaining <= 0 then
             ReleaseIcon(icon)
             RepositionIcons()
-        elseif db.showDuration then
+        elseif db.showDuration ~= false then
             icon.duration:SetText(string.format("%.1f", remaining))
         end
     end
@@ -377,41 +397,21 @@ local function IsInValidZone()
     local _, instanceType = IsInInstance()
     
     if instanceType == "arena" then
-        return db.showInArena
+        return db.showInArena ~= false
     elseif instanceType == "pvp" then
-        return db.showInBattleground
+        return db.showInBattleground ~= false
     else
-        return db.showInWorld
+        return db.showInWorld ~= false
     end
 end
 
--- Combat log event handler
-local function OnCombatLogEvent()
+-- Combat log event handler for WoW 3.3.5
+local function OnCombatLogEvent(...)
     if not IsInValidZone() then return end
     
-    local timestamp, event, hideCaster, sourceGUID, sourceName, sourceFlags, sourceRaidFlags,
-          destGUID, destName, destFlags, destRaidFlags, spellID, spellName = CombatLogGetCurrentEventInfo()
-    
-    -- Only track enemy spells
-    if not sourceGUID or sourceGUID == UnitGUID("player") then return end
-    
-    -- Check if hostile
-    local isHostile = bit.band(sourceFlags, COMBATLOG_OBJECT_REACTION_HOSTILE) > 0
-    if not isHostile then return end
-    
-    -- Track SPELL_CAST_SUCCESS and SPELL_AURA_APPLIED
-    if event == "SPELL_CAST_SUCCESS" or event == "SPELL_AURA_APPLIED" then
-        if TrackedSpells[spellID] then
-            AddCooldown(spellID, sourceGUID, sourceName)
-        end
-    end
-end
-
--- Older WoW 3.3.5 combat log handling
-local function OnCombatLogEventUnfiltered()
-    if not IsInValidZone() then return end
-    
-    local timestamp, event, sourceGUID, sourceName, sourceFlags, destGUID, destName, destFlags, spellID, spellName = select(1, ...)
+    -- WoW 3.3.5 combat log format
+    local timestamp, event, sourceGUID, sourceName, sourceFlags, destGUID, destName, destFlags = select(1, ...)
+    local spellID, spellName, spellSchool = select(9, ...)
     
     -- Only track enemy spells
     if not sourceGUID or sourceGUID == UnitGUID("player") then return end
@@ -455,10 +455,10 @@ ECT:SetScript("OnEvent", function(self, event, ...)
             end
             
             print("|cff00ff00[Enemy Cooldown Tracker]|r Loaded! Type /ect for options.")
+            print("|cff00ff00[ECT]|r Use /ect test to try it out!")
         end
     elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
-        -- WoW 3.3.5 uses different combat log event handling
-        OnCombatLogEventUnfiltered(CombatLogGetCurrentEventInfo and CombatLogGetCurrentEventInfo() or select(1, ...))
+        OnCombatLogEvent(...)
     elseif event == "PLAYER_ENTERING_WORLD" then
         -- Clear all active cooldowns on zone change
         for i = #ActiveIcons, 1, -1 do
@@ -497,12 +497,55 @@ SlashCmdList["ECT"] = function(msg)
         AnchorFrame.text:Show()
         print("|cff00ff00[ECT]|r Frame unlocked. Drag to move, then type /ect lock.")
         
-    elseif cmd == "test" then
-        -- Add some test cooldowns
-        AddCooldown(51713, "test-rogue", "TestRogue")
-        AddCooldown(46924, "test-warrior", "TestWarrior")
-        AddCooldown(45438, "test-mage", "TestMage")
-        print("|cff00ff00[ECT]|r Test cooldowns added.")
+    elseif cmd == "test" or cmd:match("^test") then
+        local testType = cmd:match("test%s*(%w*)")
+        local t = GetTime()
+        
+        if testType == "" or not testType or testType == "rogue" then
+            AddCooldown(51713, "test-rogue-"..t, "ShadowyRogue")
+        end
+        if testType == "" or not testType or testType == "warrior" then
+            AddCooldown(46924, "test-warrior-"..t, "AngryWarrior")
+        end
+        if testType == "" or not testType or testType == "mage" then
+            AddCooldown(45438, "test-mage-"..t, "FrostyMage")
+        end
+        if testType == "paladin" or testType == "pala" then
+            AddCooldown(642, "test-pala-"..t, "HolyPaladin")
+            AddCooldown(31884, "test-pala2-"..t, "HolyPaladin")
+        end
+        if testType == "hunter" then
+            AddCooldown(19263, "test-hunt-"..t, "PewPewHunter")
+        end
+        if testType == "priest" then
+            AddCooldown(33206, "test-priest-"..t, "HealyPriest")
+        end
+        if testType == "warlock" or testType == "lock" then
+            AddCooldown(47241, "test-lock-"..t, "DemoLock")
+        end
+        if testType == "druid" then
+            AddCooldown(50334, "test-druid-"..t, "FeralDruid")
+        end
+        if testType == "shaman" or testType == "sham" then
+            AddCooldown(2825, "test-sham-"..t, "EnhanceSham")
+        end
+        if testType == "dk" or testType == "deathknight" then
+            AddCooldown(48792, "test-dk-"..t, "UnholyDK")
+            AddCooldown(48707, "test-dk2-"..t, "UnholyDK")
+        end
+        if testType == "trinket" then
+            AddCooldown(42292, "test-trinket-"..t, "SomeEnemy")
+        end
+        if testType == "all" then
+            AddCooldown(51713, "test-1-"..t, "Rogue")
+            AddCooldown(46924, "test-2-"..t, "Warrior")
+            AddCooldown(45438, "test-3-"..t, "Mage")
+            AddCooldown(642, "test-4-"..t, "Paladin")
+            AddCooldown(47241, "test-5-"..t, "Warlock")
+            AddCooldown(50334, "test-6-"..t, "Druid")
+            AddCooldown(48792, "test-7-"..t, "DeathKnight")
+            AddCooldown(19263, "test-8-"..t, "Hunter")
+        end
         
     elseif cmd == "reset" then
         EnemyCooldownTrackerDB = {}
@@ -545,11 +588,17 @@ SlashCmdList["ECT"] = function(msg)
         EnemyCooldownTrackerDB.showInWorld = not EnemyCooldownTrackerDB.showInWorld
         print("|cff00ff00[ECT]|r World PvP tracking " .. (EnemyCooldownTrackerDB.showInWorld and "enabled" or "disabled"))
         
+    elseif cmd == "debug" then
+        print("|cff00ff00[ECT Debug]|r Active icons: " .. #ActiveIcons)
+        print("|cff00ff00[ECT Debug]|r Icon pool: " .. #IconPool)
+        print("|cff00ff00[ECT Debug]|r Zone valid: " .. tostring(IsInValidZone()))
+        
     else
         print("|cff00ff00[Enemy Cooldown Tracker]|r Commands:")
         print("  /ect unlock - Unlock frame to move")
         print("  /ect lock - Lock frame position")
-        print("  /ect test - Show test cooldowns")
+        print("  /ect test - Show test cooldowns (Shadow Dance, Bladestorm, Ice Block)")
+        print("  /ect test <class> - Test specific class (rogue/warrior/mage/pala/hunter/priest/lock/druid/sham/dk/all)")
         print("  /ect clear - Clear active cooldowns")
         print("  /ect size <24-128> - Set icon size")
         print("  /ect sound - Toggle sound alerts")
@@ -557,5 +606,6 @@ SlashCmdList["ECT"] = function(msg)
         print("  /ect bg - Toggle battleground tracking")
         print("  /ect world - Toggle world PvP tracking")
         print("  /ect reset - Reset to defaults")
+        print("  /ect debug - Show debug info")
     end
 end
