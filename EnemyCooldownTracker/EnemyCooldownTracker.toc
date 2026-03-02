@@ -1,0 +1,8 @@
+## Interface: 30300
+## Title: Enemy Cooldown Tracker
+## Notes: Tracks important enemy cooldowns in PvP (Bladestorm, Shadow Dance, etc.)
+## Author: Nikolay
+## Version: 1.0.0
+## SavedVariables: EnemyCooldownTrackerDB
+
+EnemyCooldownTracker.lua
