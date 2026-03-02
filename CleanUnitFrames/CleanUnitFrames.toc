@@ -1,0 +1,8 @@
+## Interface: 30300
+## Title: Clean Unit Frames
+## Notes: Modern, clean player and target frames with big HP/Mana bars
+## Author: Nikolay
+## Version: 1.0.0
+## SavedVariables: CleanUnitFramesDB
+
+CleanUnitFrames.lua
