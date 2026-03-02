@@ -1,0 +1,8 @@
+## Interface: 30300
+## Title: Mage Shield Tracker
+## Notes: Tracks Ice Barrier, Mana Shield and Fire Ward absorb amounts
+## Author: Nikolay
+## Version: 1.0.0
+## SavedVariables: MageShieldTrackerDB
+
+MageShieldTracker.lua
